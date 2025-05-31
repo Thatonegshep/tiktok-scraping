@@ -1,374 +1,126 @@
-import hashlib
-import random
-import struct
-import json
-import time
-
-
-class Gorgon:
-    def __init__(self, params: str, data: str, cookies: str) -> None:
-
-        self.params = params
-        self.data = data
-        self.cookies = cookies
-
-    def hash(self, data: str) -> str:
-        _hash = str(hashlib.md5(data.encode()).hexdigest())
-
-        return _hash
-
-    def get_base_string(self) -> str:
-        base_str = self.hash(self.params)
-        base_str = (
-            base_str + self.hash(self.data) if self.data else base_str + str("0" * 32)
-        )
-        base_str = (
-            base_str + self.hash(self.cookies)
-            if self.cookies
-            else base_str + str("0" * 32)
-        )
-
-        return base_str
-
-    def get_value(self) -> json:
-        base_str = self.get_base_string()
-
-        return self.encrypt(base_str)
-
-    def encrypt(self, data: str) -> json:
-        unix = int(time.time())
-        len = 0x14
-        key = [
-            0xDF,
-            0x77,
-            0xB9,
-            0x40,
-            0xB9,
-            0x9B,
-            0x84,
-            0x83,
-            0xD1,
-            0xB9,
-            0xCB,
-            0xD1,
-            0xF7,
-            0xC2,
-            0xB9,
-            0x85,
-            0xC3,
-            0xD0,
-            0xFB,
-            0xC3,
-        ]
-
-        param_list = []
-
-        for i in range(0, 12, 4):
-            temp = data[8 * i : 8 * (i + 1)]
-            for j in range(4):
-                H = int(temp[j * 2 : (j + 1) * 2], 16)
-                param_list.append(H)
-
-        param_list.extend([0x0, 0x6, 0xB, 0x1C])
-
-        H = int(hex(unix), 16)
-
-        param_list.append((H & 0xFF000000) >> 24)
-        param_list.append((H & 0x00FF0000) >> 16)
-        param_list.append((H & 0x0000FF00) >> 8)
-        param_list.append((H & 0x000000FF) >> 0)
-
-        eor_result_list = []
-
-        for A, B in zip(param_list, key):
-            eor_result_list.append(A ^ B)
-
-        for i in range(len):
-
-            C = self.reverse(eor_result_list[i])
-            D = eor_result_list[(i + 1) % len]
-            E = C ^ D
-
-            F = self.rbit_algorithm(E)
-            H = ((F ^ 0xFFFFFFFF) ^ len) & 0xFF
-            eor_result_list[i] = H
-
-        result = ""
-        for param in eor_result_list:
-            result += self.hex_string(param)
-
-        return {"X-Gorgon": ("0404b0d30000" + result), "X-Khronos": str(unix)}
-
-    def rbit_algorithm(self, num):
-        result = ""
-        tmp_string = bin(num)[2:]
-
-        while len(tmp_string) < 8:
-            tmp_string = "0" + tmp_string
-
-        for i in range(0, 8):
-            result = result + tmp_string[7 - i]
-
-        return int(result, 2)
-
-    def hex_string(self, num):
-        tmp_string = hex(num)[2:]
-
-        if len(tmp_string) < 2:
-            tmp_string = "0" + tmp_string
-
-        return tmp_string
-
-    def reverse(self, num):
-        tmp_string = self.hex_string(num)
-
-        return int(tmp_string[1:] + tmp_string[:1], 16)
-
-
-class Xgorgon:
-    digits = {c: i for i, c in enumerate("0123456789abcdefghijklmnopqrstuvwxyz")}
-    HEX_STRS = [
-        [30, 0, 224, 220, 147, 69, 1, 200],
-        [30, 0, 224, 236, 147, 69, 1, 200],
-        [30, 0, 224, 228, 147, 69, 1, 208],
-        [30, 60, 224, 244, 147, 69, 0, 216],
-        [30, 64, 224, 228, 147, 69, 0, 216],
-        [30, 0, 224, 227, 147, 69, 1, 213],
-        [30, 64, 224, 210, 147, 69, 0, 160],
-        [30, 64, 224, 203, 147, 69, 0, 150],
-        [30, 64, 224, 211, 147, 69, 0, 167],
-        [30, 64, 224, 228, 147, 69, 0, 156],
-        [30, 64, 224, 216, 147, 69, 0, 216],
-        [30, 64, 224, 226, 147, 69, 0, 205],
-        [30, 64, 224, 214, 147, 69, 0, 176],
-        [30, 64, 224, 217, 147, 69, 0, 180],
-        [30, 64, 224, 240, 147, 69, 0, 213],
-        [30, 64, 224, 210, 147, 69, 0, 216],
-        [30, 64, 224, 235, 147, 69, 0, 192],
-        [30, 64, 224, 234, 147, 69, 0, 193],
-        [30, 64, 224, 234, 147, 69, 0, 186],
-        [30, 64, 224, 171, 147, 69, 0, 136],
-        [30, 64, 224, 103, 147, 69, 0, 166],
-        [30, 64, 224, 167, 147, 69, 0, 15],
-        [30, 64, 224, 139, 147, 69, 0, 182],
-        [30, 64, 224, 194, 147, 69, 0, 84],
-        [30, 64, 224, 183, 147, 69, 0, 170],
-        [30, 64, 224, 205, 147, 69, 0, 125],
-        [30, 64, 224, 138, 147, 69, 0, 175],
-        [30, 64, 224, 229, 147, 69, 0, 12],
-        [30, 64, 224, 163, 147, 69, 0, 26],
-        [30, 64, 224, 105, 147, 69, 0, 35],
-        [30, 64, 224, 167, 147, 69, 0, 24],
-    ]
-    LEN = 20
-
-    def calculate(
-        self, params: str, cookie: (bool or str) = None, body: (bool or str) = None
-    ):
-
-        self.hex_str = random.choice(self.HEX_STRS)
-        hash = self.getGorgonHash(params, body, cookie)
-        hexEncryption = self.encryption()
-        gorgonHash = self.__init_hash(hash, hexEncryption)
-
-        result = ""
-        handle = self.__handle(gorgonHash["gorgon"])
-
-        for item in handle:
-            result += self.__hex2str(item)
-
-        hash_1 = self.__hex2str(self.hex_str[7])
-        hash_2 = self.__hex2str(self.hex_str[3])
-        hash_3 = self.__hex2str(self.hex_str[1])
-        hash_4 = self.__hex2str(self.hex_str[6])
-
-        return {
-            "X-Gorgon": "0404{}{}{}{}{}".format(hash_1, hash_2, hash_3, hash_4, result),
-            "X-Khronos": str(hash["time"]),
-        }
-
-    def charCodeAt(self, str, i):
-        return self.get_bianma((str[i:1]))
-
-    def encryption(self):
-        tmp = A = B = C = D = None
-        hexs = []
-        for i in range(256):
-            hexs.append(i)
-
-        for i in range(256):
-            if i == 0:
-                A = 0
-            elif tmp is not None:
-                A = tmp
-            else:
-                A = hexs[i - 1]
-            B = self.hex_str[i % 8]
-            if (A == 85) & (i != 1) & (tmp != 85):
-                A = 0
-            C = self.ensureMax(A + i + B)
-            tmp = C if C < i else None
-            D = hexs[C]
-            hexs[i] = D
-        return hexs
-
-    def ensureMax(self, val, max=256):
-        while val >= 256:
-            val = val - 256
-        return val
-
-    def epoch(self):
-        return int(round(time.time()))
-
-    def convert_base(self, hex, base):
-        return sum(
-            self.digits[digit] * (base**i)
-            for i, digit in enumerate(reversed(hex.lower()))
-        )
-
-    def fromHex(self, hex):
-        return self.convert_base(hex, int(16))
-
-    def getGorgonHash(
-        self,
-        url: str,
-        data: (bool or str) = None,
-        cookie: (bool or str) = None,
-        encoding="UTF-8",
-    ):
-        gorgon = []
-        times = int(round(time.time()))
-        hexTime = self.__to_hex(times)
-        urlmd5 = hashlib.md5(url.encode("UTF-8")).hexdigest()
-
-        rang = self.__ranges(start=4)
-        for i in rang:
-            gorgon.append(self.fromHex(urlmd5[i * 2 : 2 * i + 2]))
-
-        gorgon = gorgon + self.__xgorgon_data(data, encoding)
-        gorgon = gorgon + self.__xgorgon_cookie(cookie, encoding)
-
-        for i in rang:
-            gorgon.append(0)
-
-        for i in rang:
-            gorgon.append(self.fromHex(hexTime[i * 2 : 2 * i + 2]))
-
-        return {"gorgon": gorgon, "time": times}
-
-    def __handle(self, gorgonHash):
-        rang = self.__ranges(self.LEN)
-        for i in rang:
-            A = gorgonHash[i]
-            B = self.__reverse(A)
-            C = int(gorgonHash[(i + 1) % self.LEN])
-            D = B ^ C
-            E = self.__rbit(D)
-            F = E ^ self.LEN
-            G = ~F
-            while G < 0:
-                G += 4294967296
-
-            a = self.__to_hex(G)
-            offset = len(a) - 2
-
-            H = self.fromHex(self.__to_hex(G)[offset:])
-            gorgonHash[i] = H
-
-        return gorgonHash
-
-    def __hex2str(self, num):
-        tmp = self.__to_hex(num)
-        if len(tmp) < 2:
-            tmp = "0" + tmp
-        return tmp
-
-    def __init_hash(self, gorgonHash, hexEncryption):
-        tmp_add = []
-        tmp_hex = [] + hexEncryption
-        A = B = C = D = E = F = G = None
-        rang = self.__ranges(self.LEN)
-        for i in rang:
-            A = gorgonHash["gorgon"][i]
-            B = 0 if len(tmp_add) == 0 else tmp_add[-1]
-            C = self.ensureMax(hexEncryption[i + 1] + int(B))
-            tmp_add.append(C)
-            D = tmp_hex[C]
-            tmp_hex[i + 1] = D
-            E = self.ensureMax(D + D)
-            F = tmp_hex[E]
-            G = A ^ F
-            gorgonHash["gorgon"][i] = G
-
-        return gorgonHash
-
-    def __ranges(self, start=0, stop=None, step=1):
-        if stop is None:
-            stop = start
-            start = 0
-
-        if ((step > 0) & (start >= stop)) or (step < 0) & (start <= stop):
-            return []
-
-        result = []
-
-        for x in range(start, stop, step):
-            result.append(x)
-
-        return result
-
-    def __rbit(self, num):
-        result = ""
-        tmp = format(num, "b")
-
-        while len(tmp) < 8:
-            tmp = "0" + tmp
-
-        rang = self.__ranges(8)
-        for i in rang:
-            result += tmp[7 - i]
-        return int(result, 2)
-
-    def __reverse(self, num):
-        tmp = self.__to_hex(num)
-        if len(tmp) < 2:
-            tmp = "0" + tmp
-
-        return self.fromHex(tmp[1:10] + tmp[0:1])
-
-    def __to_hex(self, num):
-        return format(int(num), "x")
-
-    def __xgorgon_cookie(self, cookie: str, encoding="utf-8"):
-        gorgon = []
-        rang = self.__ranges(4)
-        if (cookie is None) or (len(cookie) == 0):
-            for i in rang:
-                gorgon.append(0)
-        else:
-            hashstr = hashlib.md5(cookie.encode()).hexdigest()
-            for i in rang:
-                gorgon.append(self.fromHex(hashstr[i * 2 : 2 * i + 2]))
-
-        return gorgon
-
-    def __xgorgon_data(self, data: str, encoding="utf-8"):
-        gorgon = []
-        data_md5 = None
-
-        if (data is None) or (len(data) == 0):
-            rang = self.__ranges(4)
-            for i in rang:
-                gorgon.append(0)
-
-        else:
-            data_md5 = data
-
-            if encoding == "octet":
-                data_md5 = hashlib.md5(data.encode()).hexdigest()
-            rang = self.__ranges(4)
-
-            for i in rang:
-                gorgon.append(self.fromHex(data_md5[i * 2 : 2 * i + 2]))
-
-        return gorgon
+Q='utf-8'
+P='UTF-8'
+O='time'
+N='X-Khronos'
+M='X-Gorgon'
+L=format
+K=round
+J=enumerate
+H='gorgon'
+F=str
+E='0'
+D=range
+C=len
+B=int
+A=None
+import hashlib as G,random as R,struct,json,time as I
+class S:
+	def __init__(A,params,data,cookies):A.params=params;A.data=data;A.cookies=cookies
+	def hash(B,data):A=F(G.md5(data.encode()).hexdigest());return A
+	def get_base_string(A):B=A.hash(A.params);B=B+A.hash(A.data)if A.data else B+F(E*32);B=B+A.hash(A.cookies)if A.cookies else B+F(E*32);return B
+	def get_value(A):B=A.get_base_string();return A.encrypt(B)
+	def encrypt(H,data):
+		J=B(I.time());len=20;O=[223,119,185,64,185,155,132,131,209,185,203,209,247,194,185,133,195,208,251,195];C=[]
+		for E in D(0,12,4):
+			P=data[8*E:8*(E+1)]
+			for K in D(4):A=B(P[K*2:(K+1)*2],16);C.append(A)
+		C.extend([0,6,11,28]);A=B(hex(J),16);C.append((A&4278190080)>>24);C.append((A&16711680)>>16);C.append((A&65280)>>8);C.append((A&255)>>0);G=[]
+		for(Q,R)in zip(C,O):G.append(Q^R)
+		for E in D(len):S=H.reverse(G[E]);T=G[(E+1)%len];U=S^T;V=H.rbit_algorithm(U);A=(V^4294967295^len)&255;G[E]=A
+		L=''
+		for W in G:L+=H.hex_string(W)
+		return{M:'0404b0d30000'+L,N:F(J)}
+	def rbit_algorithm(H,num):
+		F='';A=bin(num)[2:]
+		while C(A)<8:A=E+A
+		for G in D(0,8):F=F+A[7-G]
+		return B(F,2)
+	def hex_string(B,num):
+		A=hex(num)[2:]
+		if C(A)<2:A=E+A
+		return A
+	def reverse(C,num):A=C.hex_string(num);return B(A[1:]+A[:1],16)
+class T:
+	digits={B:A for(A,B)in J('0123456789abcdefghijklmnopqrstuvwxyz')};HEX_STRS=[[30,0,224,220,147,69,1,200],[30,0,224,236,147,69,1,200],[30,0,224,228,147,69,1,208],[30,60,224,244,147,69,0,216],[30,64,224,228,147,69,0,216],[30,0,224,227,147,69,1,213],[30,64,224,210,147,69,0,160],[30,64,224,203,147,69,0,150],[30,64,224,211,147,69,0,167],[30,64,224,228,147,69,0,156],[30,64,224,216,147,69,0,216],[30,64,224,226,147,69,0,205],[30,64,224,214,147,69,0,176],[30,64,224,217,147,69,0,180],[30,64,224,240,147,69,0,213],[30,64,224,210,147,69,0,216],[30,64,224,235,147,69,0,192],[30,64,224,234,147,69,0,193],[30,64,224,234,147,69,0,186],[30,64,224,171,147,69,0,136],[30,64,224,103,147,69,0,166],[30,64,224,167,147,69,0,15],[30,64,224,139,147,69,0,182],[30,64,224,194,147,69,0,84],[30,64,224,183,147,69,0,170],[30,64,224,205,147,69,0,125],[30,64,224,138,147,69,0,175],[30,64,224,229,147,69,0,12],[30,64,224,163,147,69,0,26],[30,64,224,105,147,69,0,35],[30,64,224,167,147,69,0,24]];LEN=20
+	def calculate(A,params,cookie=A,body=A):
+		A.hex_str=R.choice(A.HEX_STRS);hash=A.getGorgonHash(params,body,cookie);C=A.encryption();D=A.__init_hash(hash,C);B='';E=A.__handle(D[H])
+		for G in E:B+=A.__hex2str(G)
+		I=A.__hex2str(A.hex_str[7]);J=A.__hex2str(A.hex_str[3]);K=A.__hex2str(A.hex_str[1]);L=A.__hex2str(A.hex_str[6]);return{M:'0404{}{}{}{}{}'.format(I,J,K,L,B),N:F(hash[O])}
+	def charCodeAt(A,str,i):return A.get_bianma(str[i:1])
+	def encryption(H):
+		F=C=I=G=J=A;E=[]
+		for B in D(256):E.append(B)
+		for B in D(256):
+			if B==0:C=0
+			elif F is not A:C=F
+			else:C=E[B-1]
+			I=H.hex_str[B%8]
+			if(C==85)&(B!=1)&(F!=85):C=0
+			G=H.ensureMax(C+B+I);F=G if G<B else A;J=E[G];E[B]=J
+		return E
+	def ensureMax(B,val,max=256):
+		A=val
+		while A>=256:A=A-256
+		return A
+	def epoch(A):return B(K(I.time()))
+	def convert_base(A,hex,base):return sum(A.digits[C]*base**B for(B,C)in J(reversed(hex.lower())))
+	def fromHex(A,hex):return A.convert_base(hex,B(16))
+	def getGorgonHash(C,url,data=A,cookie=A,encoding=P):
+		F=encoding;A=[];J=B(K(I.time()));L=C.__to_hex(J);M=G.md5(url.encode(P)).hexdigest();E=C.__ranges(start=4)
+		for D in E:A.append(C.fromHex(M[D*2:2*D+2]))
+		A=A+C.__xgorgon_data(data,F);A=A+C.__xgorgon_cookie(cookie,F)
+		for D in E:A.append(0)
+		for D in E:A.append(C.fromHex(L[D*2:2*D+2]))
+		return{H:A,O:J}
+	def __handle(A,gorgonHash):
+		D=gorgonHash;G=A.__ranges(A.LEN)
+		for F in G:
+			H=D[F];I=A.__reverse(H);J=B(D[(F+1)%A.LEN]);K=I^J;L=A.__rbit(K);M=L^A.LEN;E=~M
+			while E<0:E+=4294967296
+			N=A.__to_hex(E);O=C(N)-2;P=A.fromHex(A.__to_hex(E)[O:]);D[F]=P
+		return D
+	def __hex2str(B,num):
+		A=B.__to_hex(num)
+		if C(A)<2:A=E+A
+		return A
+	def __init_hash(D,gorgonHash,hexEncryption):
+		L=hexEncryption;G=gorgonHash;I=[];J=[]+L;M=N=K=E=O=P=Q=A;R=D.__ranges(D.LEN)
+		for F in R:M=G[H][F];N=0 if C(I)==0 else I[-1];K=D.ensureMax(L[F+1]+B(N));I.append(K);E=J[K];J[F+1]=E;O=D.ensureMax(E+E);P=J[O];Q=M^P;G[H][F]=Q
+		return G
+	def __ranges(H,start=0,stop=A,step=1):
+		E=step;C=stop;B=start
+		if C is A:C=B;B=0
+		if(E>0)&(B>=C)or(E<0)&(B<=C):return[]
+		F=[]
+		for G in D(B,C,E):F.append(G)
+		return F
+	def __rbit(F,num):
+		D='';A=L(num,'b')
+		while C(A)<8:A=E+A
+		G=F.__ranges(8)
+		for H in G:D+=A[7-H]
+		return B(D,2)
+	def __reverse(B,num):
+		A=B.__to_hex(num)
+		if C(A)<2:A=E+A
+		return B.fromHex(A[1:10]+A[0:1])
+	def __to_hex(A,num):return L(B(num),'x')
+	def __xgorgon_cookie(F,cookie,encoding=Q):
+		B=cookie;D=[];H=F.__ranges(4)
+		if B is A or C(B)==0:
+			for E in H:D.append(0)
+		else:
+			I=G.md5(B.encode()).hexdigest()
+			for E in H:D.append(F.fromHex(I[E*2:2*E+2]))
+		return D
+	def __xgorgon_data(D,data,encoding=Q):
+		B=data;E=[];F=A
+		if B is A or C(B)==0:
+			H=D.__ranges(4)
+			for I in H:E.append(0)
+		else:
+			F=B
+			if encoding=='octet':F=G.md5(B.encode()).hexdigest()
+			H=D.__ranges(4)
+			for I in H:E.append(D.fromHex(F[I*2:2*I+2]))
+		return E
